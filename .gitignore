@@ -1,0 +1,25 @@
+# generated outputs
+generated/
+
+# local binaries
+cosim/linxcore_lockstep_runner
+generated/cpp/**/tb_linxcore_ooo_pyc_cpp
+generated/cpp/**/test_rob_bookkeeping
+
+# benchmark and test outputs
+tests/**/*.bin
+tests/**/*.log
+tests/**/*.jsonl
+tests/**/*.memh
+tests/**/*.elf
+tests/**/*.sock
+tests/tmp_*/
+tests/benchmarks/
+tests/benchmarks_linxcore/
+
+# python cache
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
