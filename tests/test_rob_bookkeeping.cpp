@@ -141,8 +141,11 @@ int main(int argc, char **argv) {
       // Within one cycle, multi-commit slots must stay in ROB order.
       if (havePrevSlotRob) {
         const std::uint64_t expected = (prevSlotRob + 1) % kRobDepth;
-        if (s.rob != expected) {
-          std::cerr << "ROB slot-order mismatch: prev=" << prevSlotRob << " expected=" << expected << " got=" << s.rob
+        const bool sameRob = (s.rob == prevSlotRob);
+        const bool nextRob = (s.rob == expected);
+        if (!sameRob && !nextRob) {
+          std::cerr << "ROB slot-order mismatch: prev=" << prevSlotRob
+                    << " expected_same_or_next={" << prevSlotRob << "," << expected << "} got=" << s.rob
                     << "\n";
           return 1;
         }

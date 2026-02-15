@@ -9,6 +9,17 @@ TB_SRC="${ROOT_DIR}/tb/tb_linxcore_ooo_pyc.cpp"
 TB_EXE="${GEN_CPP_DIR}/tb_linxcore_ooo_pyc_cpp"
 TB_CXXFLAGS="${PYC_TB_CXXFLAGS:--O3 -DNDEBUG}"
 
+PYC_API_INCLUDE="${PYC_ROOT}/include"
+if [[ ! -f "${PYC_API_INCLUDE}/pyc/cpp/pyc_sim.hpp" ]]; then
+  cand="$(find "${PYC_ROOT}" -path '*/include/pyc/cpp/pyc_sim.hpp' -print -quit 2>/dev/null || true)"
+  if [[ -n "${cand}" ]]; then
+    PYC_API_INCLUDE="${cand%/pyc/cpp/pyc_sim.hpp}"
+  fi
+fi
+PYC_COMPAT_INCLUDE="${ROOT_DIR}/generated/include_compat"
+mkdir -p "${PYC_COMPAT_INCLUDE}/pyc"
+ln -sfn "${PYC_ROOT}/runtime/cpp" "${PYC_COMPAT_INCLUDE}/pyc/cpp"
+
 need_regen=0
 if [[ ! -f "${HDR}" ]]; then
   need_regen=1
@@ -30,7 +41,10 @@ fi
 if [[ "${need_build}" -ne 0 ]]; then
   tmp_exe="${TB_EXE}.tmp.$$"
   "${CXX:-clang++}" -std=c++17 ${TB_CXXFLAGS} \
-    -I "${PYC_ROOT}/include" \
+    -I "${PYC_COMPAT_INCLUDE}" \
+    -I "${PYC_API_INCLUDE}" \
+    -I "${PYC_ROOT}/runtime" \
+    -I "${PYC_ROOT}/runtime/cpp" \
     -I "${GEN_CPP_DIR}" \
     -o "${tmp_exe}" \
     "${TB_SRC}"

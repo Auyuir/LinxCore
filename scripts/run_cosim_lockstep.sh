@@ -5,6 +5,16 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 PYC_ROOT="/Users/zhoubot/pyCircuit"
 GEN_CPP_DIR="${ROOT_DIR}/generated/cpp/linxcore_ooo_pyc"
 GEN_HDR="${GEN_CPP_DIR}/linxcore_ooo_pyc.hpp"
+PYC_API_INCLUDE="${PYC_ROOT}/include"
+if [[ ! -f "${PYC_API_INCLUDE}/pyc/cpp/pyc_sim.hpp" ]]; then
+  cand="$(find "${PYC_ROOT}" -path '*/include/pyc/cpp/pyc_sim.hpp' -print -quit 2>/dev/null || true)"
+  if [[ -n "${cand}" ]]; then
+    PYC_API_INCLUDE="${cand%/pyc/cpp/pyc_sim.hpp}"
+  fi
+fi
+PYC_COMPAT_INCLUDE="${ROOT_DIR}/generated/include_compat"
+mkdir -p "${PYC_COMPAT_INCLUDE}/pyc"
+ln -sfn "${PYC_ROOT}/runtime/cpp" "${PYC_COMPAT_INCLUDE}/pyc/cpp"
 
 ELF=""
 BOOT_PC=""
@@ -124,7 +134,10 @@ fi
 if [[ "${need_runner_build}" -ne 0 ]]; then
   echo "[cosim] building lockstep runner"
   "${CXX:-clang++}" -std=c++17 -O2 -Wall -Wextra \
-    -I "${PYC_ROOT}/include" \
+    -I "${PYC_COMPAT_INCLUDE}" \
+    -I "${PYC_API_INCLUDE}" \
+    -I "${PYC_ROOT}/runtime" \
+    -I "${PYC_ROOT}/runtime/cpp" \
     -I "${GEN_CPP_DIR}" \
     -o "${RUNNER_BIN}" \
     "${ROOT_DIR}/cosim/linxcore_lockstep_runner.cpp"

@@ -12,7 +12,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [[ ! -f "${MEMH}" ]]; then
-  bash "${ROOT_DIR}/scripts/build_linxisa_benchmarks_memh_compat.sh" >/dev/null
+  build_out="$("${ROOT_DIR}/scripts/build_linxisa_benchmarks_memh_compat.sh")"
+  memh2="$(printf "%s\n" "${build_out}" | sed -n '2p')"
+  if [[ -n "${memh2}" && -f "${memh2}" ]]; then
+    MEMH="${memh2}"
+  fi
 fi
 if [[ ! -f "${MEMH}" ]]; then
   echo "error: missing memh after benchmark build: ${MEMH}" >&2

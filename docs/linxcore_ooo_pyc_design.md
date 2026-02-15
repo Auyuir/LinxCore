@@ -2,10 +2,11 @@
 
 ## Scope
 
-This document describes the standalone LinxCore OoO refactor implemented in:
+This document describes the standalone LinxCore/Janus stage-mapped OoO refactor implemented in:
 
 - `/Users/zhoubot/LinxCore/pyc/linxcore_ooo_pyc.py`
 - `/Users/zhoubot/LinxCore/pyc/linxcore/*`
+- `/Users/zhoubot/LinxCore/pyc/linxcore/janus/*`
 
 Primary goals:
 
@@ -17,17 +18,22 @@ Primary goals:
 
 Top-level modules instantiated with real `m.instance` boundaries:
 
+- `JanusTop` integration (`/Users/zhoubot/LinxCore/pyc/linxcore/janus/top.py`)
 - `LinxCoreMem2R1W` (`/Users/zhoubot/LinxCore/pyc/linxcore/mem/mem2r1w.py`)
-- `LinxCoreFrontend` (`/Users/zhoubot/LinxCore/pyc/linxcore/frontend/frontend.py`)
-- `LinxCoreBackend` (`/Users/zhoubot/LinxCore/pyc/linxcore/backend/backend.py`)
+- `LinxCoreBackend` compatibility path (`/Users/zhoubot/LinxCore/pyc/linxcore/backend/backend.py`)
 
 Shared/common logic:
 
 - `/Users/zhoubot/LinxCore/pyc/linxcore/common/{isa.py,decode_f4.py,exec_uop.py,types.py,params.py,util.py}`
 
-Backend stage contracts are split into dedicated files:
+Janus BCC stage contracts are split into dedicated files:
 
-- `/Users/zhoubot/LinxCore/pyc/linxcore/backend/{decode.py,rename.py,dispatch.py,issue.py,wakeup.py,lsu.py,rob.py,commit.py,code_template_unit.py}`
+- IFU: `/Users/zhoubot/LinxCore/pyc/linxcore/janus/bcc/ifu/{f0.py,f1.py,f2.py,f3.py,f4.py,icache.py,ctrl.py}`
+- OOO: `/Users/zhoubot/LinxCore/pyc/linxcore/janus/bcc/ooo/{dec1.py,dec2.py,ren.py,s1.py,s2.py,rob.py,pc_buffer.py,flush_ctrl.py,renu.py}`
+- IEX: `/Users/zhoubot/LinxCore/pyc/linxcore/janus/bcc/iex/{iex.py,iex_alu.py,iex_bru.py,iex_fsu.py,iex_agu.py,iex_std.py}`
+- BCtrl: `/Users/zhoubot/LinxCore/pyc/linxcore/janus/bcc/bctrl/{bctrl.py,bisq.py,brenu.py,brob.py}`
+- LSU: `/Users/zhoubot/LinxCore/pyc/linxcore/janus/bcc/lsu/{liq.py,lhq.py,stq.py,scb.py,mdb.py,l1d.py}`
+- TMU/TMA/CUBE/TAU: `/Users/zhoubot/LinxCore/pyc/linxcore/janus/tmu/*`, `/Users/zhoubot/LinxCore/pyc/linxcore/janus/tma/tma.py`, `/Users/zhoubot/LinxCore/pyc/linxcore/janus/cube/cube.py`, `/Users/zhoubot/LinxCore/pyc/linxcore/janus/tau/tau.py`
 
 ## Memory-first behavior
 
@@ -70,12 +76,14 @@ These are consumed by:
   - `/Users/zhoubot/LinxCore/scripts/run_cosim_lockstep.sh`
 - Benchmark harness:
   - `/Users/zhoubot/LinxCore/scripts/run_linxcore_benchmarks.sh`
+  - `/Users/zhoubot/LinxCore/scripts/build_linxisa_benchmarks_memh_compat.sh` now defaults `LINX_INCLUDE_LIBM=0` to avoid unresolved soft-float runtime symbols on minimal Linx toolchains. Set `LINX_INCLUDE_LIBM=1` only when builtins are available.
 
 ## Validation gates
 
 - `/Users/zhoubot/LinxCore/tests/test_runner_protocol.sh`
 - `/Users/zhoubot/LinxCore/tests/test_trace_schema_and_mem.sh`
 - `/Users/zhoubot/LinxCore/tests/test_cosim_smoke.sh`
+- `/Users/zhoubot/LinxCore/tests/test_stage_connectivity.sh`
 
 ## Notes
 

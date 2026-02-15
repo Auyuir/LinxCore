@@ -12,40 +12,41 @@ LD="${LLVM_BIN}/ld.lld"
 OBJCOPY="${LLVM_BIN}/llvm-objcopy"
 LINX_LD_SCRIPT="${LINX_LD_SCRIPT:-${HOME}/linx-libc/linx.ld}"
 LINX_TARGET="${LINX_TARGET:-linx64-linx-none-elf}"
+LINX_INCLUDE_LIBM="${LINX_INCLUDE_LIBM:-0}"
 
 OUT_DIR="${OUT_DIR:-${ROOT_DIR}/tests/benchmarks/build}"
 BUILD_DIR="${OUT_DIR}/obj"
+FALLBACK_BENCH_DIR="${ROOT_DIR}/third_party/pycircuit_ref/janus/generated/benchmarks"
 
 CORE_ITERATIONS="${CORE_ITERATIONS:-10}"
 DHRY_RUNS="${DHRY_RUNS:-1000}"
 LINX_HEAP_SIZE="${LINX_HEAP_SIZE:-65536}"
 
-if [[ ! -x "${CLANG}" ]]; then
-  echo "error: missing clang at ${CLANG}" >&2
-  exit 1
+can_build=1
+for req in \
+  "${CLANG}" \
+  "${LD}" \
+  "${OBJCOPY}" \
+  "${LINX_LD_SCRIPT}" \
+  "${PYC_ROOT}/janus/tools/elf_to_memh.sh"
+do
+  if [[ ! -e "${req}" ]]; then
+    can_build=0
+  fi
+done
+if [[ ! -d "${LINXISA_DIR}/workloads/benchmarks" || ! -d "${LINXISA_DIR}/toolchain/libc" ]]; then
+  can_build=0
 fi
-if [[ ! -x "${LD}" ]]; then
-  echo "error: missing ld.lld at ${LD}" >&2
-  exit 1
-fi
-if [[ ! -x "${OBJCOPY}" ]]; then
-  echo "error: missing llvm-objcopy at ${OBJCOPY}" >&2
-  exit 1
-fi
-if [[ ! -f "${LINX_LD_SCRIPT}" ]]; then
-  echo "error: missing linker script at ${LINX_LD_SCRIPT}" >&2
-  exit 1
-fi
-if [[ ! -d "${LINXISA_DIR}/workloads/benchmarks" ]]; then
-  echo "error: missing benchmarks at ${LINXISA_DIR}/workloads/benchmarks" >&2
-  exit 1
-fi
-if [[ ! -d "${LINXISA_DIR}/toolchain/libc" ]]; then
-  echo "error: missing libc at ${LINXISA_DIR}/toolchain/libc" >&2
-  exit 1
-fi
-if [[ ! -f "${PYC_ROOT}/janus/tools/elf_to_memh.sh" ]]; then
-  echo "error: missing elf_to_memh.sh at ${PYC_ROOT}/janus/tools/elf_to_memh.sh" >&2
+
+if [[ "${can_build}" == "0" ]]; then
+  core_fallback="${FALLBACK_BENCH_DIR}/coremark_full.memh"
+  dhry_fallback="${FALLBACK_BENCH_DIR}/dhrystone_full.memh"
+  if [[ -f "${core_fallback}" && -f "${dhry_fallback}" ]]; then
+    echo "${core_fallback}"
+    echo "${dhry_fallback}"
+    exit 0
+  fi
+  echo "error: missing benchmarks/toolchain and fallback memh not found" >&2
   exit 1
 fi
 
@@ -109,15 +110,18 @@ build_runtime() {
   cc "${LIBC_SRC}/stdlib/stdlib.c" "${rt_dir}/stdlib.o"
   cc "${LIBC_SRC}/string/mem.c" "${rt_dir}/mem.o"
   cc "${LIBC_SRC}/string/str.c" "${rt_dir}/str.o"
-  cc "${LIBC_SRC}/math/math.c" "${rt_dir}/math.o"
   objs+=(
     "${rt_dir}/syscall.o"
     "${rt_dir}/stdio.o"
     "${rt_dir}/stdlib.o"
     "${rt_dir}/mem.o"
     "${rt_dir}/str.o"
-    "${rt_dir}/math.o"
   )
+
+  if [[ "${LINX_INCLUDE_LIBM}" == "1" ]]; then
+    cc "${LIBC_SRC}/math/math.c" "${rt_dir}/math.o"
+    objs+=("${rt_dir}/math.o")
+  fi
 
   printf "%s\n" "${objs[@]}"
 }

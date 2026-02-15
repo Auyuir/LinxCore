@@ -8,6 +8,8 @@
 - Purpose: checks commit-slot ROB ordering within multi-commit cycles and basic mem metadata invariants.
 - `test_cosim_smoke.sh`
 - Purpose: QEMU -> runner -> DUT co-sim smoke (`trigger_pc == boot_pc`) plus forced-mismatch negative path.
+- `test_stage_connectivity.sh`
+- Purpose: Janus stage naming/interface lint and top-level stage-prefix connectivity checks.
 
 Run all:
 
@@ -16,4 +18,5 @@ bash /Users/zhoubot/LinxCore/tests/test_runner_protocol.sh
 bash /Users/zhoubot/LinxCore/tests/test_trace_schema_and_mem.sh
 bash /Users/zhoubot/LinxCore/tests/test_rob_bookkeeping.sh
 bash /Users/zhoubot/LinxCore/tests/test_cosim_smoke.sh
+bash /Users/zhoubot/LinxCore/tests/test_stage_connectivity.sh
 ```

@@ -55,6 +55,9 @@ from .isa import (
     OP_C_SWI,
     OP_C_ZEXT_W,
     OP_EBREAK,
+    OP_FEQ,
+    OP_FLT,
+    OP_FGE,
     OP_FENTRY,
     OP_FEXIT,
     OP_FRET_RA,
@@ -96,6 +99,7 @@ from .isa import (
     OP_ORIW,
     OP_ORW,
     OP_XOR,
+    OP_XORI,
     OP_XORIW,
     OP_DIV,
     OP_DIVU,
@@ -133,8 +137,10 @@ from .isa import (
     OP_SLLIW,
     OP_SLLW,
     OP_SRL,
+    OP_SRLI,
     OP_SRLW,
     OP_SRA,
+    OP_SRAI,
     OP_SRAW,
     OP_SRAIW,
     OP_SRLIW,
@@ -308,13 +314,16 @@ def decode_window(m: Circuit, window: Wire) -> Decode:
     set_if(cond, op_v=OP_C_SETRET, len_v=2, regdst_v=10, imm_v=uimm5.zext(width=6).shl(amount=1))
 
     cond = in16 & masked_eq(insn16, mask=0x003F, match=0x002A)
+    # C.SWI stores implicit `t0` (TQ head, areg 24) to [base=rs16 + imm*4].
     set_if(cond, op_v=OP_C_SWI, len_v=2, srcl_v=rs16, srcr_v=24, imm_v=simm5_11_s64)
 
     cond = in16 & masked_eq(insn16, mask=0x003F, match=0x003A)
+    # C.SDI stores implicit `t0` (TQ head, areg 24) to [base=rs16 + imm*8].
     set_if(cond, op_v=OP_C_SDI, len_v=2, srcl_v=rs16, srcr_v=24, imm_v=simm5_11_s64)
 
     cond = in16 & masked_eq(insn16, mask=0x003F, match=0x000A)
-    set_if(cond, op_v=OP_C_LWI, len_v=2, srcl_v=rs16, imm_v=simm5_11_s64)
+    # C.LWI writes result to the implicit temporary register (`t`, architectural reg 31).
+    set_if(cond, op_v=OP_C_LWI, len_v=2, regdst_v=31, srcl_v=rs16, imm_v=simm5_11_s64)
 
     cond = in16 & masked_eq(insn16, mask=0x003F, match=0x001A)
     set_if(cond, op_v=OP_C_LDI, len_v=2, regdst_v=31, srcl_v=rs16, imm_v=simm5_11_s64)
@@ -482,6 +491,9 @@ def decode_window(m: Circuit, window: Wire) -> Decode:
     cond = in32 & masked_eq(insn32, mask=0x0000707F, match=0x00003035)
     set_if(cond, op_v=OP_ORIW, len_v=4, regdst_v=rd32, srcl_v=rs1_32, imm_v=imm12_s64)
 
+    cond = in32 & masked_eq(insn32, mask=0x0000707F, match=0x00004015)
+    set_if(cond, op_v=OP_XORI, len_v=4, regdst_v=rd32, srcl_v=rs1_32, imm_v=imm12_s64)
+
     cond = in32 & masked_eq(insn32, mask=0x0000707F, match=0x00004035)
     set_if(cond, op_v=OP_XORIW, len_v=4, regdst_v=rd32, srcl_v=rs1_32, imm_v=imm12_s64)
 
@@ -535,6 +547,12 @@ def decode_window(m: Circuit, window: Wire) -> Decode:
 
     cond = in32 & masked_eq(insn32, mask=0xFC00707F, match=0x00007015)
     set_if(cond, op_v=OP_SLLI, len_v=4, regdst_v=rd32, srcl_v=rs1_32, shamt_v=shamt6_32)
+
+    cond = in32 & masked_eq(insn32, mask=0xFC00707F, match=0x00005015)
+    set_if(cond, op_v=OP_SRLI, len_v=4, regdst_v=rd32, srcl_v=rs1_32, shamt_v=shamt6_32)
+
+    cond = in32 & masked_eq(insn32, mask=0xFC00707F, match=0x00006015)
+    set_if(cond, op_v=OP_SRAI, len_v=4, regdst_v=rd32, srcl_v=rs1_32, shamt_v=shamt6_32)
 
     cond = in32 & masked_eq(insn32, mask=0xFE00707F, match=0x00005035)
     set_if(cond, op_v=OP_SRLIW, len_v=4, regdst_v=rd32, srcl_v=rs1_32, shamt_v=rs2_32)
@@ -924,6 +942,16 @@ def decode_window(m: Circuit, window: Wire) -> Decode:
 
     cond = in32 & masked_eq(insn32, mask=0xF800707F, match=0x00004045)
     set_if(cond, op_v=OP_CMP_LT, len_v=4, regdst_v=rd32, srcl_v=rs1_32, srcr_v=rs2_32, srcr_type_v=srcr_type_32)
+
+    # Floating-point compares (SrcType in bits[26:25]: 0=fd, 1=fs).
+    cond = in32 & masked_eq(insn32, mask=0x0000707F, match=0x0000005B)
+    set_if(cond, op_v=OP_FEQ, len_v=4, regdst_v=rd32, srcl_v=rs1_32, srcr_v=rs2_32, srcr_type_v=srcr_type_32)
+
+    cond = in32 & masked_eq(insn32, mask=0x0000707F, match=0x0000205B)
+    set_if(cond, op_v=OP_FLT, len_v=4, regdst_v=rd32, srcl_v=rs1_32, srcr_v=rs2_32, srcr_type_v=srcr_type_32)
+
+    cond = in32 & masked_eq(insn32, mask=0x0000707F, match=0x0000305B)
+    set_if(cond, op_v=OP_FGE, len_v=4, regdst_v=rd32, srcl_v=rs1_32, srcr_v=rs2_32, srcr_type_v=srcr_type_32)
 
     cond = in32 & masked_eq(insn32, mask=0xF0FFFFFF, match=0x0010102B)
     set_if(cond, op_v=OP_EBREAK, len_v=4)

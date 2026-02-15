@@ -178,6 +178,16 @@ OP_SLLW = 137
 OP_SRLW = 138
 OP_SRAW = 139
 
+# --- floating-point compare ops (scalar; SrcType in srcr_type) ---
+OP_FEQ = 140
+OP_FLT = 141
+OP_FGE = 142
+
+# --- integer immediate ops added during qemu parity bring-up ---
+OP_XORI = 143
+OP_SRLI = 144
+OP_SRAI = 145
+
 REG_INVALID = 0x3F
 
 # Bring-up stage IDs (legacy in-order core).

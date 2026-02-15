@@ -53,6 +53,9 @@ from .isa import (
     OP_C_SETRET,
     OP_C_SWI,
     OP_C_ZEXT_W,
+    OP_FEQ,
+    OP_FLT,
+    OP_FGE,
     OP_FENTRY,
     OP_FEXIT,
     OP_FRET_RA,
@@ -93,6 +96,7 @@ from .isa import (
     OP_ORIW,
     OP_ORW,
     OP_XOR,
+    OP_XORI,
     OP_XORIW,
     OP_DIV,
     OP_DIVU,
@@ -130,8 +134,10 @@ from .isa import (
     OP_SLLIW,
     OP_SLLW,
     OP_SRL,
+    OP_SRLI,
     OP_SRLW,
     OP_SRA,
+    OP_SRAI,
     OP_SRAW,
     OP_SRAIW,
     OP_SRLIW,
@@ -235,6 +241,7 @@ def exec_uop_comb(
     op_subiw = op.eq(OP_SUBIW)
     op_andiw = op.eq(OP_ANDIW)
     op_oriw = op.eq(OP_ORIW)
+    op_xori = op.eq(OP_XORI)
     op_xoriw = op.eq(OP_XORIW)
     op_mul = op.eq(OP_MUL)
     op_mulw = op.eq(OP_MULW)
@@ -252,6 +259,8 @@ def exec_uop_comb(
     op_srl = op.eq(OP_SRL)
     op_sra = op.eq(OP_SRA)
     op_slli = op.eq(OP_SLLI)
+    op_srli = op.eq(OP_SRLI)
+    op_srai = op.eq(OP_SRAI)
     op_slliw = op.eq(OP_SLLIW)
     op_sllw = op.eq(OP_SLLW)
     op_srlw = op.eq(OP_SRLW)
@@ -277,6 +286,9 @@ def exec_uop_comb(
     op_cmp_ltui = op.eq(OP_CMP_LTUI)
     op_cmp_gei = op.eq(OP_CMP_GEI)
     op_cmp_geui = op.eq(OP_CMP_GEUI)
+    op_feq = op.eq(OP_FEQ)
+    op_flt = op.eq(OP_FLT)
+    op_fge = op.eq(OP_FGE)
     op_setc_geui = op.eq(OP_SETC_GEUI)
     op_setc_eq = op.eq(OP_SETC_EQ)
     op_setc_ne = op.eq(OP_SETC_NE)
@@ -426,6 +438,7 @@ def exec_uop_comb(
     alu = op_ori.select(srcl_val | imm, alu)
     alu = op_andiw.select((srcl_val & imm).trunc(width=32).sext(width=64), alu)
     alu = op_oriw.select((srcl_val | imm).trunc(width=32).sext(width=64), alu)
+    alu = op_xori.select(srcl_val ^ imm, alu)
     alu = op_xoriw.select((srcl_val ^ imm).trunc(width=32).sext(width=64), alu)
 
     alu = op_mul.select(srcl_val * srcr_val, alu)
@@ -459,6 +472,8 @@ def exec_uop_comb(
     alu = op_srl.select(lshr_var(m, srcl_val, srcr_val), alu)
     alu = op_sra.select(ashr_var(m, srcl_val, srcr_val), alu)
     alu = op_slli.select(shl_var(m, srcl_val, shamt), alu)
+    alu = op_srli.select(lshr_var(m, srcl_val, shamt), alu)
+    alu = op_srai.select(ashr_var(m, srcl_val, shamt), alu)
 
     sh5 = shamt & 0x1F
     sh5r = srcr_val & 0x1F
@@ -511,6 +526,49 @@ def exec_uop_comb(
     alu = op_cmp_ltu.select(srcl_val.ult(srcr_addsub_nosh).select(one64, z64), alu)
     alu = op_cmp_ltui.select(srcl_val.ult(imm).select(one64, z64), alu)
     alu = op_cmp_geui.select(srcl_val.uge(imm).select(one64, z64), alu)
+
+    # --- FP compares (ordered FEQ/FLT/FGE, fd/fs via srcr_type) ---
+    fd_exp_l = srcl_val[52:63]
+    fd_exp_r = srcr_val[52:63]
+    fd_frac_l = srcl_val[0:52]
+    fd_frac_r = srcr_val[0:52]
+    fd_nan_l = fd_exp_l.eq(c(0x7FF, width=11)) & (~fd_frac_l.eq(c(0, width=52)))
+    fd_nan_r = fd_exp_r.eq(c(0x7FF, width=11)) & (~fd_frac_r.eq(c(0, width=52)))
+    fd_nan = fd_nan_l | fd_nan_r
+    fd_zero_l = (srcl_val & c(0x7FFF_FFFF_FFFF_FFFF, width=64)).eq(c(0, width=64))
+    fd_zero_r = (srcr_val & c(0x7FFF_FFFF_FFFF_FFFF, width=64)).eq(c(0, width=64))
+    fd_both_zero = fd_zero_l & fd_zero_r
+    fd_key_l = srcl_val[63].select(~srcl_val, srcl_val ^ c(0x8000_0000_0000_0000, width=64))
+    fd_key_r = srcr_val[63].select(~srcr_val, srcr_val ^ c(0x8000_0000_0000_0000, width=64))
+    fd_lt = (~fd_nan) & (~fd_both_zero) & fd_key_l.ult(fd_key_r)
+    fd_eq = (~fd_nan) & (srcl_val.eq(srcr_val) | fd_both_zero)
+    fd_ge = (~fd_nan) & (fd_both_zero | fd_key_l.uge(fd_key_r))
+
+    fs_l = srcl_val.trunc(width=32)
+    fs_r = srcr_val.trunc(width=32)
+    fs_exp_l = fs_l[23:31]
+    fs_exp_r = fs_r[23:31]
+    fs_frac_l = fs_l[0:23]
+    fs_frac_r = fs_r[0:23]
+    fs_nan_l = fs_exp_l.eq(c(0xFF, width=8)) & (~fs_frac_l.eq(c(0, width=23)))
+    fs_nan_r = fs_exp_r.eq(c(0xFF, width=8)) & (~fs_frac_r.eq(c(0, width=23)))
+    fs_nan = fs_nan_l | fs_nan_r
+    fs_zero_l = (fs_l & c(0x7FFF_FFFF, width=32)).eq(c(0, width=32))
+    fs_zero_r = (fs_r & c(0x7FFF_FFFF, width=32)).eq(c(0, width=32))
+    fs_both_zero = fs_zero_l & fs_zero_r
+    fs_key_l = fs_l[31].select(~fs_l, fs_l ^ c(0x8000_0000, width=32))
+    fs_key_r = fs_r[31].select(~fs_r, fs_r ^ c(0x8000_0000, width=32))
+    fs_lt = (~fs_nan) & (~fs_both_zero) & fs_key_l.ult(fs_key_r)
+    fs_eq = (~fs_nan) & (fs_l.eq(fs_r) | fs_both_zero)
+    fs_ge = (~fs_nan) & (fs_both_zero | fs_key_l.uge(fs_key_r))
+
+    fp_is_fs = srcr_type.eq(c(1, width=2))
+    fp_eq = fp_is_fs.select(fs_eq, fd_eq)
+    fp_lt = fp_is_fs.select(fs_lt, fd_lt)
+    fp_ge = fp_is_fs.select(fs_ge, fd_ge)
+    alu = op_feq.select(fp_eq.select(one64, z64), alu)
+    alu = op_flt.select(fp_lt.select(one64, z64), alu)
+    alu = op_fge.select(fp_ge.select(one64, z64), alu)
 
     # --- SETC.* (write 0/1; commit stage consumes val[0]) ---
     uimm_sh = shl_var(m, imm, shamt)
@@ -696,6 +754,7 @@ def exec_uop(
     consts: Consts,
 ) -> ExecOut:
     with m.scope("exec"):
+        c = m.const
         z1 = consts.zero1
         z4 = consts.zero4
         z64 = consts.zero64
@@ -742,6 +801,7 @@ def exec_uop(
         op_subiw = op == OP_SUBIW
         op_andiw = op == OP_ANDIW
         op_oriw = op == OP_ORIW
+        op_xori = op == OP_XORI
         op_xoriw = op == OP_XORIW
         op_mul = op == OP_MUL
         op_mulw = op == OP_MULW
@@ -759,6 +819,8 @@ def exec_uop(
         op_srl = op == OP_SRL
         op_sra = op == OP_SRA
         op_slli = op == OP_SLLI
+        op_srli = op == OP_SRLI
+        op_srai = op == OP_SRAI
         op_slliw = op == OP_SLLIW
         op_sllw = op == OP_SLLW
         op_srlw = op == OP_SRLW
@@ -784,6 +846,9 @@ def exec_uop(
         op_cmp_ltui = op == OP_CMP_LTUI
         op_cmp_gei = op == OP_CMP_GEI
         op_cmp_geui = op == OP_CMP_GEUI
+        op_feq = op == OP_FEQ
+        op_flt = op == OP_FLT
+        op_fge = op == OP_FGE
         op_setc_geui = op == OP_SETC_GEUI
         op_setc_eq = op == OP_SETC_EQ
         op_setc_ne = op == OP_SETC_NE
@@ -1065,6 +1130,13 @@ def exec_uop(
             size = z4
             addr = z64
             wdata = z64
+        if op_xori:
+            alu = srcl_val ^ imm
+            is_load = z1
+            is_store = z1
+            size = z4
+            addr = z64
+            wdata = z64
         if op_xoriw:
             alu = (srcl_val ^ imm).trunc(width=32).sext(width=64)
             is_load = z1
@@ -1190,6 +1262,20 @@ def exec_uop(
             wdata = z64
         if op_slli:
             alu = shl_var(m, srcl_val, shamt)
+            is_load = z1
+            is_store = z1
+            size = z4
+            addr = z64
+            wdata = z64
+        if op_srli:
+            alu = lshr_var(m, srcl_val, shamt)
+            is_load = z1
+            is_store = z1
+            size = z4
+            addr = z64
+            wdata = z64
+        if op_srai:
+            alu = ashr_var(m, srcl_val, shamt)
             is_load = z1
             is_store = z1
             size = z4
@@ -1456,6 +1542,66 @@ def exec_uop(
             cmp_geui = 1
         if op_cmp_geui:
             alu = cmp_geui
+            is_load = z1
+            is_store = z1
+            size = z4
+            addr = z64
+            wdata = z64
+
+        fd_exp_l = srcl_val[52:63]
+        fd_exp_r = srcr_val[52:63]
+        fd_frac_l = srcl_val[0:52]
+        fd_frac_r = srcr_val[0:52]
+        fd_nan_l = fd_exp_l.eq(c(0x7FF, width=11)) & (~fd_frac_l.eq(c(0, width=52)))
+        fd_nan_r = fd_exp_r.eq(c(0x7FF, width=11)) & (~fd_frac_r.eq(c(0, width=52)))
+        fd_nan = fd_nan_l | fd_nan_r
+        fd_zero_l = (srcl_val & c(0x7FFF_FFFF_FFFF_FFFF, width=64)).eq(c(0, width=64))
+        fd_zero_r = (srcr_val & c(0x7FFF_FFFF_FFFF_FFFF, width=64)).eq(c(0, width=64))
+        fd_both_zero = fd_zero_l & fd_zero_r
+        fd_key_l = srcl_val[63].select(~srcl_val, srcl_val ^ c(0x8000_0000_0000_0000, width=64))
+        fd_key_r = srcr_val[63].select(~srcr_val, srcr_val ^ c(0x8000_0000_0000_0000, width=64))
+        fd_lt = (~fd_nan) & (~fd_both_zero) & fd_key_l.ult(fd_key_r)
+        fd_eq = (~fd_nan) & (srcl_val.eq(srcr_val) | fd_both_zero)
+        fd_ge = (~fd_nan) & (fd_both_zero | fd_key_l.uge(fd_key_r))
+
+        fs_l = srcl_val.trunc(width=32)
+        fs_r = srcr_val.trunc(width=32)
+        fs_exp_l = fs_l[23:31]
+        fs_exp_r = fs_r[23:31]
+        fs_frac_l = fs_l[0:23]
+        fs_frac_r = fs_r[0:23]
+        fs_nan_l = fs_exp_l.eq(c(0xFF, width=8)) & (~fs_frac_l.eq(c(0, width=23)))
+        fs_nan_r = fs_exp_r.eq(c(0xFF, width=8)) & (~fs_frac_r.eq(c(0, width=23)))
+        fs_nan = fs_nan_l | fs_nan_r
+        fs_zero_l = (fs_l & c(0x7FFF_FFFF, width=32)).eq(c(0, width=32))
+        fs_zero_r = (fs_r & c(0x7FFF_FFFF, width=32)).eq(c(0, width=32))
+        fs_both_zero = fs_zero_l & fs_zero_r
+        fs_key_l = fs_l[31].select(~fs_l, fs_l ^ c(0x8000_0000, width=32))
+        fs_key_r = fs_r[31].select(~fs_r, fs_r ^ c(0x8000_0000, width=32))
+        fs_lt = (~fs_nan) & (~fs_both_zero) & fs_key_l.ult(fs_key_r)
+        fs_eq = (~fs_nan) & (fs_l.eq(fs_r) | fs_both_zero)
+        fs_ge = (~fs_nan) & (fs_both_zero | fs_key_l.uge(fs_key_r))
+
+        fp_is_fs = srcr_type.eq(c(1, width=2))
+        fp_eq = fp_is_fs.select(fs_eq, fd_eq)
+        fp_lt = fp_is_fs.select(fs_lt, fd_lt)
+        fp_ge = fp_is_fs.select(fs_ge, fd_ge)
+        if op_feq:
+            alu = fp_eq.select(1, z64)
+            is_load = z1
+            is_store = z1
+            size = z4
+            addr = z64
+            wdata = z64
+        if op_flt:
+            alu = fp_lt.select(1, z64)
+            is_load = z1
+            is_store = z1
+            size = z4
+            addr = z64
+            wdata = z64
+        if op_fge:
+            alu = fp_ge.select(1, z64)
             is_load = z1
             is_store = z1
             size = z4
